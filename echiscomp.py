@@ -37,32 +37,35 @@ class Lexer:
         return self.tokens
 
     def tokenize_line(self, line):
+           
         keywords = [
             ('CLASS',   r'κλάση|κλαση|class'),
             ('TRY',     r'δοκίμασε|δοκιμασε|try'),
-            ('EXCEPT',  r'εκτός|except'),
+            ('EXCEPT',  r'εκτός|εκτος|except'),
             ('AND',     r'και|and'),
-            ('OR',      r'ή|or'),
-            ('NOT',     r'όχι|not'),
-            ('BREAK',   r'σπάσε|break'),
-            ('CONTINUE',r'συνέχισε|continue'),
-            ('IMPORT',  r'εισαγωγή|import'),
-            ('PRINT',   r'εκτύπωσε|print'),
+            ('OR',      r'ή|η|or'),        
+            ('NOT',     r'όχι|οχι|not'),      
+            ('BREAK',   r'σπάσε|σπασε|break'),
+            ('CONTINUE',r'συνέχισε|συνεχισε|continue'),
+            ('IMPORT',  r'εισαγωγή|εισαγωγη|import'),
+            ('PRINT',   r'εκτύπωσε|εκτυπωσε|print'),
             ('DEF',     r'όρισε|ορισε|def'),
-            ('RETURN',  r'γύρισε|return'),
+            ('RETURN',  r'γύρισε|γυρισε|return'),
             ('IF',      r'αν|if'),
-            ('ELSE',    r'αλλιώς|else'),
-            ('WHILE',   r'όσο|while'),
+            ('ELSE',    r'αλλιώς|αλλιως|else'),
+            ('WHILE',   r'όσο|οσο|while'),
             ('FOR',     r'για|for'),
             ('IN',      r'σε|στο|στα|in'),
             ('WITH',    r'με\s+(?:τον|την|το|τα|τους|τις)|με|with'),
             ('AS',      r'ως|as'),
+        
         ]
         
+       
         syntax = [
             ('POWER',   r'\*\*'),
             ('NUMBER',  r'\d+'),
-            ('ID',      r'[a-zA-Z_α-ωΑ-Ωά-ώΆ-Ώ]+'), 
+            ('ID',      r'[a-zA-Z_α-ωΑ-Ωά-ώΆ-Ώ]+'), # Ελληνικά γράμματα
             ('LPAREN',  r'\('), ('RPAREN',  r'\)'),
             ('LBRACKET',r'\['), ('RBRACKET',r'\]'),
             ('LBRACE',  r'\{'), ('RBRACE',  r'\}'),
@@ -101,7 +104,9 @@ class Lexer:
             elif line[line_pos].isspace(): 
                 line_pos += 1
             else:
-                raise SyntaxError(f"Unknown character: {line[line_pos]}")
+                
+                line_pos += 1
+
 
 class Parser:
     def __init__(self, tokens):
@@ -112,7 +117,7 @@ class Parser:
             t = self.tokens[self.pos]
             self.pos += 1; return t
         curr = self.tokens[self.pos] if self.pos < len(self.tokens) else 'EOF'
-        raise SyntaxError(f"Expected {expected}, found {curr}")
+        raise SyntaxError(f"Σφάλμα Σύνταξης: Περίμενα {expected}, βρήκα {curr}")
     def peek(self, offset=0):
         idx = self.pos + offset
         return self.tokens[idx][0] if idx < len(self.tokens) else None
@@ -137,7 +142,6 @@ class Parser:
         elif t == 'RETURN': return ('RETURN', self.consume('RETURN') and self.parse_logic())
         elif t == 'BREAK': return ('BREAK', self.consume('BREAK'))
         elif t == 'CONTINUE': return ('CONTINUE', self.consume('CONTINUE'))
-        
         elif t == 'CLASS':
             self.consume('CLASS'); name = self.consume('ID')[1]; body = self.parse_block()
             return ('CLASS', name, body)
@@ -230,6 +234,7 @@ class Parser:
         while self.pos < len(self.tokens): stmts.append(self.parse_statement())
         return stmts
 
+
 class GreekCompiler:
     def __init__(self): self.output = []; self.indent = 0
     def emit(self, line): self.output.append("    " * self.indent + line)
@@ -259,6 +264,7 @@ class GreekCompiler:
         
         elif kind == 'CALL':
             func = self.compile_node(node[1])
+            # Μεταφράσεις Συναρτήσεων
             if func.lower() in ('εύρος', 'ευρος'): func = 'range'
             if func in ('συμβολοσειρά', 'κείμενο'): func = 'str'
             if func in ('ακέραιος',): func = 'int'
@@ -302,32 +308,39 @@ class GreekCompiler:
         for stmt in ast: self.compile_node(stmt)
         return "\n".join(self.output)
 
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Error: No input file provided.")
-        sys.exit(1)
+       
+        sys.exit(0)
+        
     source_file = sys.argv[1]
     if not os.path.exists(source_file):
-        print("Error: File not found.")
         sys.exit(1)
 
-    base_name = os.path.splitext(source_file)[0]
-    cache_file = base_name + ".py"
-    should_compile = True
-    if os.path.exists(cache_file) and os.path.getmtime(cache_file) > os.path.getmtime(source_file):
-        should_compile = False
+    try:
+       
+        with open(source_file, 'r', encoding='utf-8') as f: greek_code = f.read()
+        
+        # Μεταγλώττιση
+        lexer = Lexer(greek_code)
+        tokens = lexer.tokenize()
+        
+        parser = Parser(tokens)
+        ast = parser.parse()
+        
+        compiler = GreekCompiler()
+        python_code = compiler.compile(ast)
+        
+      
+        if not python_code.strip() and greek_code.strip():
+            print("Warning: Empty output produced.")
 
-    if should_compile:
-        try:
-            print(f"Compiling {source_file}...")
-            with open(source_file, 'r', encoding='utf-8') as f: greek_code = f.read()
-            lexer = Lexer(greek_code); tokens = lexer.tokenize()
-            parser = Parser(tokens); ast = parser.parse()
-            compiler = GreekCompiler(); python_code = compiler.compile(ast)
-            with open(cache_file, 'w', encoding='utf-8') as f:
-                f.write("# Generated by Echis Compiler\n" + python_code)
-            print("Build successful.")
-        except Exception as e:
-            print(f"Compilation Error: {e}"); sys.exit(1)
-
-    os.system(f"python {cache_file}")
+        # Εκτέλεση του κώδικα απευθείας στη μνήμη
+        exec(python_code, {'__name__': '__main__'})
+        
+    except Exception as e:
+        print(f"Error: {e}")
+       
+        input("Press Enter...") 
+        sys.exit(1)
